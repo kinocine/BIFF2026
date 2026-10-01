@@ -121,13 +121,6 @@
       flex-shrink: 0;
     }
 
-    /* 안내 메시지 */
-    .shelf-hint {
-      font-size: 11px;
-      color: #888;
-      margin: 0 0 8px 4px;
-    }
-
     /* 메인 화면 박스 그리드 */
     .bookshelf-grid {
       display: grid;
@@ -139,7 +132,7 @@
       background: white;
       border: 1px solid #dadce0;
       border-radius: 8px;
-      padding: 14px 6px;
+      padding: 14px 22px 14px 8px;
       text-align: center;
       cursor: pointer;
       box-shadow: 0 1px 3px rgba(0,0,0,0.04);
@@ -150,18 +143,12 @@
       justify-content: center;
       min-height: 64px;
       box-sizing: border-box;
-      user-select: none;
       position: relative;
     }
     .shelf-box:hover {
       border-color: #d93025;
       transform: translateY(-2px);
       box-shadow: 0 3px 6px rgba(217, 48, 37, 0.12);
-    }
-    .shelf-box.pressing {
-      background-color: #ffebee !important;
-      border-color: #d93025 !important;
-      transform: scale(0.97);
     }
     .shelf-title {
       font-size: 13px;
@@ -174,6 +161,25 @@
       font-size: 11px;
       color: #888;
       margin-top: 4px;
+    }
+    /* 박스 삭제 (X) 버튼 */
+    .btn-box-del {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: none;
+      border: none;
+      color: #aaa;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+      padding: 2px 5px;
+      border-radius: 50%;
+      line-height: 1;
+    }
+    .btn-box-del:hover {
+      color: #d93025;
+      background-color: #fce8e6;
     }
 
     /* 상세 페이지 영역 */
@@ -228,7 +234,7 @@
       margin-left: 6px;
     }
 
-    /* 매체 리스트 아이템: URL 노출 차단, 오직 매체명만 표시 */
+    /* 개별 목록 아이템 */
     .sub-item {
       background: #f8f9fa;
       padding: 10px 14px;
@@ -263,23 +269,41 @@
       color: #d93025;
     }
 
+    /* 액션 버튼 그룹: 수정, 삭제, 위로, 아래로 */
     .sub-actions {
       display: flex;
-      gap: 6px;
+      gap: 5px;
       flex-shrink: 0;
+      align-items: center;
     }
     .btn-action {
       border: none;
       cursor: pointer;
       font-weight: bold;
       font-size: 12px;
-      padding: 5px 10px;
+      padding: 5px 9px;
       border-radius: 4px;
+      line-height: 1;
     }
     .btn-edit { color: #1a73e8; background: #e8f0fe; }
     .btn-edit:hover { background: #d2e3fc; }
     .btn-delete { color: #d93025; background: #fce8e6; }
     .btn-delete:hover { background: #fad2cf; }
+    
+    .btn-move {
+      background: #f1f3f4;
+      color: #555;
+      font-size: 13px;
+      padding: 4px 7px;
+    }
+    .btn-move:hover {
+      background: #dadce0;
+      color: #000;
+    }
+    .btn-move:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
 
     .loading {
       text-align: center;
@@ -331,7 +355,6 @@
 
   <!-- 1. 메인 화면: 가나다/영문 정렬 영화 박스만 노출 -->
   <div id="mainView">
-    <div class="shelf-hint">💡 영화 박스를 클릭하면 상세 링크로 이동하며, 잘못 등록한 영화 박스는 <b>2초간 길게 누르거나(우클릭)</b> 삭제할 수 있습니다.</div>
     <div class="bookshelf-grid" id="bookshelfGrid"></div>
   </div>
 
@@ -348,7 +371,7 @@
 
 <script>
   // 📌 구글 앱스 스크립트 웹 앱 배포 URL
-  const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwsBakvj8F5yNE7khtPBhpj_-2qm7wLwwYFoIdh-gQdb_lg73SOAK8dnvNdruRbsf0VDA/exec";
+  const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw-OglNAlkNGYvDtv-iysBiDg1Ph0zQOFv9M_XtZvQYisQyqyQe24yRfozw-h-n1XU9iw/exec";
 
   let allRawData = [];
   let tabList = [];
@@ -413,7 +436,6 @@
     });
   }
 
-  // 화면 상태 분기
   function renderView() {
     const searchKeyword = document.getElementById('searchInput').value.trim();
     const mainView = document.getElementById('mainView');
@@ -434,7 +456,7 @@
     }
   }
 
-  // 메인 화면 영화 박스 렌더링 + 롱클릭(2초) 삭제 기능 탑재
+  // 메인 화면 영화 박스 렌더링 (박스별 X 삭제 버튼 탑재)
   function renderMainGrid() {
     const grid = document.getElementById('bookshelfGrid');
     grid.innerHTML = '';
@@ -448,82 +470,35 @@
     tabList.forEach(title => {
       const box = document.createElement('div');
       box.className = 'shelf-box';
+      box.onclick = () => openMovieDetail(title);
 
       box.innerHTML = `
+        <button type="button" class="btn-box-del" title="이 영화 박스 삭제" onclick="confirmDeleteMovie(event, '${title}')">✕</button>
         <div class="shelf-title">${title}</div>
         <div class="shelf-count">${counts[title] || 0}건</div>
       `;
-
-      // --- 롱클릭 (약 2초 누르고 있기) 및 우클릭 삭제 이벤트 바인딩 ---
-      let pressTimer = null;
-      let isLongPress = false;
-
-      const startPress = (e) => {
-        isLongPress = false;
-        box.classList.add('pressing');
-        pressTimer = setTimeout(() => {
-          isLongPress = true;
-          box.classList.remove('pressing');
-          confirmDeleteMovie(title);
-        }, 1800); // 1.8초간 누르면 발동
-      };
-
-      const cancelPress = () => {
-        box.classList.remove('pressing');
-        if (pressTimer) {
-          clearTimeout(pressTimer);
-          pressTimer = null;
-        }
-      };
-
-      // 모바일 터치 이벤트
-      box.addEventListener('touchstart', startPress, { passive: true });
-      box.addEventListener('touchend', (e) => {
-        cancelPress();
-        if (!isLongPress) {
-          openMovieDetail(title);
-        }
-      });
-      box.addEventListener('touchmove', cancelPress);
-
-      // PC 마우스 이벤트
-      box.addEventListener('mousedown', (e) => {
-        if (e.button === 0) startPress(e); // 좌클릭일 때만 타이머 시작
-      });
-      box.addEventListener('mouseup', (e) => {
-        cancelPress();
-        if (!isLongPress && e.button === 0) {
-          openMovieDetail(title);
-        }
-      });
-      box.addEventListener('mouseleave', cancelPress);
-
-      // PC 마우스 우클릭으로도 즉시 삭제 가능
-      box.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        confirmDeleteMovie(title);
-      });
 
       grid.appendChild(box);
     });
   }
 
-  // 영화 박스 전체 삭제 확인창
-  function confirmDeleteMovie(movieTitle) {
-    if (confirm(`⚠️ [${movieTitle}] 영화를 박스 채로 완전히 삭제하시겠습니까?\n\n이 영화에 연결된 모든 링크 데이터가 함께 삭제됩니다.`)) {
+  // 영화 박스 전체 삭제
+  function confirmDeleteMovie(event, movieTitle) {
+    event.stopPropagation(); // 상세 진입 방지
+    if (confirm(`⚠️ [${movieTitle}] 영화를 완전히 삭제하시겠습니까?\n이 영화에 연결된 모든 링크 데이터가 함께 삭제됩니다.`)) {
       showLoading(true);
       fetch(WEB_APP_URL, {
         method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({ action: "deleteMovie", movieTitle: movieTitle })
       })
-      .then(res => res.json())
       .then(() => {
         if (currentMovie === movieTitle) currentMovie = '';
         loadData();
       })
       .catch(err => {
         console.error("영화 삭제 실패:", err);
-        showLoading(false);
+        loadData();
       });
     }
   }
@@ -547,16 +522,15 @@
     renderView();
   }
 
-  // 개별 영화 상세 뷰: [매체명]만 깔끔하게 노출
+  // 개별 영화 상세 뷰: 위/아래 순서 이동 버튼 포함
   function renderMovieDetail(movieTitle) {
     const contentArea = document.getElementById('detailContent');
     contentArea.innerHTML = '';
 
+    // 시트에 등록된 순서(인덱스 순) 그대로 필터링
     const items = allRawData.filter(item => 
       (item.title || item.tab || '').trim().toLowerCase() === movieTitle.trim().toLowerCase()
     );
-
-    items.sort((a, b) => (parseInt(b.rowNum, 10) || 0) - (parseInt(a.rowNum, 10) || 0));
 
     const bookBox = document.createElement('div');
     bookBox.className = 'book-box';
@@ -572,17 +546,24 @@
     if (items.length === 0) {
       bookContentsDiv.innerHTML = `<div style="padding: 20px; text-align: center; color: #888;">등록된 매체가 없습니다.</div>`;
     } else {
-      items.forEach(item => {
+      items.forEach((item, index) => {
         const subItem = document.createElement('div');
         subItem.className = 'sub-item';
         const itemEscaped = encodeURIComponent(JSON.stringify(item));
 
-        // 🌟 핵심: a 태그 안에는 긴 URL을 절대 넣지 않고 [매체/기사명]만 표시!
+        const isFirst = index === 0;
+        const isLast = index === items.length - 1;
+
+        const prevRow = isFirst ? null : items[index - 1].rowNum;
+        const nextRow = isLast ? null : items[index + 1].rowNum;
+
         subItem.innerHTML = `
           <div class="sub-item-link-wrap">
             <a href="${item.url}" target="_blank" title="${item.url}">📄 [${item.description}]</a>
           </div>
           <div class="sub-actions">
+            <button type="button" class="btn-action btn-move" title="위로 이동" ${isFirst ? 'disabled' : ''} onclick="moveItemRow(${item.rowNum}, ${prevRow})">↑</button>
+            <button type="button" class="btn-action btn-move" title="아래로 이동" ${isLast ? 'disabled' : ''} onclick="moveItemRow(${item.rowNum}, ${nextRow})">↓</button>
             <button type="button" class="btn-action btn-edit" onclick="startEdit('${itemEscaped}')">수정</button>
             <button type="button" class="btn-action btn-delete" onclick="deleteItem('${item.rowNum}')">삭제</button>
           </div>
@@ -624,8 +605,6 @@
 
     sortedGroupKeys.forEach(titleKey => {
       const items = grouped[titleKey];
-      items.sort((a, b) => (parseInt(b.rowNum, 10) || 0) - (parseInt(a.rowNum, 10) || 0));
-
       const bookBox = document.createElement('div');
       bookBox.className = 'book-box';
 
@@ -660,6 +639,24 @@
     });
   }
 
+  // 행 순서 교환 (위/아래 이동)
+  function moveItemRow(currRow, targetRow) {
+    if (!currRow || !targetRow) return;
+
+    showLoading(true);
+    fetch(WEB_APP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "swapRows", rowA: currRow, rowB: targetRow })
+    })
+    .then(() => loadData())
+    .catch(err => {
+      console.error("이동 실패:", err);
+      loadData();
+    });
+  }
+
+  // 폼 등록 / 수정
   function handleSubmit(e) {
     e.preventDefault();
     showLoading(true);
@@ -678,9 +675,9 @@
 
     fetch(WEB_APP_URL, {
       method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action: "save", item: item })
     })
-    .then(res => res.json())
     .then(() => {
       currentMovie = inputTitle;
       resetForm();
@@ -688,7 +685,7 @@
     })
     .catch(err => {
       console.error("저장 실패:", err);
-      showLoading(false);
+      loadData();
     });
   }
 
@@ -706,19 +703,20 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  // 개별 링크 항목 삭제
   function deleteItem(rowNum) {
     if (!confirm("이 링크 항목을 정말 삭제하시겠습니까?")) return;
 
     showLoading(true);
     fetch(WEB_APP_URL, {
       method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action: "delete", rowNum: rowNum })
     })
-    .then(res => res.json())
     .then(() => loadData())
     .catch(err => {
       console.error("삭제 실패:", err);
-      showLoading(false);
+      loadData();
     });
   }
 
